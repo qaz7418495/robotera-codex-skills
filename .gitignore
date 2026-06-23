@@ -1,0 +1,32 @@
+# Generated report outputs
+mcap_analysis_outputs/
+**/feishu_assets/
+**/charts/
+**/joint_command_samples.csv
+**/joint_feedback_samples.csv
+**/joint_temperature_samples.csv
+**/joint_stats.csv
+**/left_right_compare.csv
+**/report_manifest.json
+**/report.md
+**/feishu_report.xml
+
+# Large or private data
+*.mcap
+*.db3
+*.bag
+*.zip
+*.tar
+*.tar.gz
+
+# Secrets and local config
+.env
+.env.*
+*.pem
+*.key
+*.token
+
+# Python/cache/editor noise
+__pycache__/
+*.pyc
+.DS_Store

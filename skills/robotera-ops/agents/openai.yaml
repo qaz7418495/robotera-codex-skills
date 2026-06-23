@@ -1,0 +1,3 @@
+display_name: ROBOTERA Knowledge
+short_description: ROBOTERA robot knowledge base for operations, troubleshooting, testing, hardware, and architecture.
+default_prompt: Use ROBOTERA robot knowledge references to answer SDK, XOS, ROS2, operation, troubleshooting, testing, hardware, architecture, log, upgrade, deployment, and data-analysis questions safely and accurately.
