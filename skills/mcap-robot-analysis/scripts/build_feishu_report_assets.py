@@ -93,9 +93,30 @@ def compare_rows(rows: list[dict[str, str]]) -> list[list[str]]:
             row.get("field", ""),
             row.get("left_joint", ""),
             row.get("right_joint", ""),
+            fmt_num(row.get("left_min")),
+            fmt_num(row.get("right_min")),
+            fmt_num(row.get("delta_min")),
+            fmt_num(row.get("left_max")),
+            fmt_num(row.get("right_max")),
+            fmt_num(row.get("delta_max")),
+            fmt_num(row.get("left_mean")),
+            fmt_num(row.get("right_mean")),
+            fmt_num(row.get("delta_mean")),
+            fmt_num(row.get("left_abs_mean")),
+            fmt_num(row.get("right_abs_mean")),
+            fmt_num(row.get("delta_abs_mean")),
+            fmt_num(row.get("left_positive_abs_mean")),
+            fmt_num(row.get("right_positive_abs_mean")),
+            fmt_num(row.get("delta_positive_abs_mean")),
+            fmt_num(row.get("left_negative_abs_mean")),
+            fmt_num(row.get("right_negative_abs_mean")),
+            fmt_num(row.get("delta_negative_abs_mean")),
             fmt_num(row.get("left_range")),
             fmt_num(row.get("right_range")),
             fmt_num(row.get("delta_range")),
+            fmt_num(row.get("left_slope_per_second")),
+            fmt_num(row.get("right_slope_per_second")),
+            fmt_num(row.get("delta_slope_per_second")),
         ])
     return out
 
@@ -193,8 +214,18 @@ def build_xml(output_dir: Path, manifest: dict[str, Any], chart_count: int) -> s
     xml.append("<h2>命令位置变化范围（全部关节）</h2>")
     xml.append(table(["joint", "source", "field", "min", "max", "abs_mean", "positive_abs_mean", "negative_abs_mean", "range"], metric_rows(sorted_by_range(stats_rows, "command", "position"))))
     xml.append("<h1>四、左右对称关节对比</h1>")
-    xml.append("<p>下表为左右相同位置的全量对比数据，按 range 差异绝对值排序；手指关节已按约束排除。</p>")
-    xml.append(table(["pair", "source", "field", "left_joint", "right_joint", "left_range", "right_range", "delta_range"], compare_rows(compare_sorted)))
+    xml.append("<p>下表为左右相同位置的全量对比数据，按 range 差异绝对值排序；手指关节已按约束排除。温升斜率使用 slope_per_second 字段，仅在温度数据存在时有值。</p>")
+    xml.append(table([
+        "pair", "source", "field", "left_joint", "right_joint",
+        "left_min", "right_min", "delta_min",
+        "left_max", "right_max", "delta_max",
+        "left_mean", "right_mean", "delta_mean",
+        "left_abs_mean", "right_abs_mean", "delta_abs_mean",
+        "left_pos_abs_mean", "right_pos_abs_mean", "delta_pos_abs_mean",
+        "left_neg_abs_mean", "right_neg_abs_mean", "delta_neg_abs_mean",
+        "left_range", "right_range", "delta_range",
+        "left_slope/s", "right_slope/s", "delta_slope/s",
+    ], compare_rows(compare_sorted)))
     xml.append("<h1>五、注意事项</h1>")
     for caveat in caveats:
         xml.append(f'<callout emoji="⚠️" background-color="light-yellow" border-color="yellow"><p>{esc(caveat)}</p></callout>')

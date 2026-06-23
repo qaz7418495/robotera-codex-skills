@@ -457,6 +457,7 @@ def main() -> None:
         "left_positive_abs_mean", "right_positive_abs_mean", "delta_positive_abs_mean",
         "left_negative_abs_mean", "right_negative_abs_mean", "delta_negative_abs_mean",
         "left_range", "right_range", "delta_range",
+        "left_slope_per_second", "right_slope_per_second", "delta_slope_per_second",
     ]
     for pair, left, right in pairs_for(ordered_joints):
         for source, field in [
@@ -472,7 +473,7 @@ def main() -> None:
             if not lrow or not rrow:
                 continue
             row = {"pair": pair, "left_joint": left, "right_joint": right, "source": source, "field": field}
-            for metric in ("min", "max", "mean", "abs_mean", "positive_abs_mean", "negative_abs_mean", "range"):
+            for metric in ("min", "max", "mean", "abs_mean", "positive_abs_mean", "negative_abs_mean", "range", "slope_per_second"):
                 lv = lrow[metric]
                 rv = rrow[metric]
                 row[f"left_{metric}"] = lv

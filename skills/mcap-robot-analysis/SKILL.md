@@ -113,7 +113,8 @@ Statistics constraints:
 - Use `positive_abs_mean` and `negative_abs_mean` separately to show asymmetric positive/negative activity ranges.
 - Key summary tables in the Feishu report must show `abs_mean`, `positive_abs_mean`, and `negative_abs_mean`.
 - Key summary tables must include all matching joints, not only TOP N, unless the user explicitly asks for a ranked excerpt.
-- Left/right comparison should include `abs_mean`, `positive_abs_mean`, and `negative_abs_mean` deltas when available.
+- Left/right comparison should include extrema (`min`/`max`), signed `mean`, `abs_mean`, `positive_abs_mean`, `negative_abs_mean`, `range`, and `slope_per_second` deltas when available.
+- Treat `slope_per_second` as temperature rise/fall slope for temperature rows; leave it empty for non-temperature rows unless a meaningful slope is explicitly computed.
 - Left/right comparison tables in the Feishu report must include all rows from `left_right_compare.csv`, not only TOP N, unless the user explicitly asks for a shortened excerpt.
 
 Plotting constraint:
