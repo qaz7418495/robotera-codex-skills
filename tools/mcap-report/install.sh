@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPOSITORY_ROOT="$(cd -- "$SOURCE_DIR/../.." && pwd)"
 INSTALL_ROOT="${MCAP_REPORT_INSTALL_ROOT:-$HOME/.local/share/robotera-mcap-report}"
 BIN_DIR="${MCAP_REPORT_BIN_DIR:-$HOME/.local/bin}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -10,7 +11,7 @@ SKIP_LARK_CLI=0
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [options]
+Usage: ./tools/mcap-report/install.sh [options]
 
 Options:
   --skip-python-deps  Do not install Python packages (for offline/testing use)
@@ -59,10 +60,11 @@ echo "Installing application files to $INSTALL_ROOT"
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 rm -rf "$INSTALL_ROOT/bin" "$INSTALL_ROOT/skills" "$INSTALL_ROOT/docs"
 cp -a "$SOURCE_DIR/bin" "$INSTALL_ROOT/bin"
-cp -a "$SOURCE_DIR/skills" "$INSTALL_ROOT/skills"
 cp -a "$SOURCE_DIR/docs" "$INSTALL_ROOT/docs"
+mkdir -p "$INSTALL_ROOT/skills"
+cp -a "$REPOSITORY_ROOT/skills/mcap-robot-analysis" "$INSTALL_ROOT/skills/"
 cp "$SOURCE_DIR/requirements-mcap-report.txt" "$INSTALL_ROOT/"
-cp "$SOURCE_DIR/README.md" "$INSTALL_ROOT/"
+cp "$SOURCE_DIR/docs/README.md" "$INSTALL_ROOT/README.md"
 
 if [[ ! -x "$INSTALL_ROOT/.venv/bin/python" ]]; then
   echo "Creating isolated Python environment"
@@ -78,7 +80,7 @@ if [[ ! -x "$INSTALL_ROOT/.venv/bin/python" ]]; then
       "$PYTHON_BIN" -m venv "$INSTALL_ROOT/.venv"
     else
       echo "ERROR: Python venv support is missing." >&2
-      echo "Install the venv package for your Python distribution and rerun ./install.sh." >&2
+      echo "Install the venv package for your Python distribution and rerun tools/mcap-report/install.sh." >&2
       exit 1
     fi
   fi

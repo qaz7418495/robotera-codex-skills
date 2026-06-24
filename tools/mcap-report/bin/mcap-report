@@ -14,8 +14,18 @@ from pathlib import Path
 from typing import Any
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = REPO_ROOT / "skills" / "mcap-robot-analysis"
+TOOL_ROOT = Path(__file__).resolve().parents[1]
+
+
+def find_skill_dir() -> Path:
+    for parent in (TOOL_ROOT, *TOOL_ROOT.parents):
+        candidate = parent / "skills" / "mcap-robot-analysis"
+        if candidate.is_dir():
+            return candidate
+    raise RuntimeError("could not locate skills/mcap-robot-analysis")
+
+
+SKILL_DIR = find_skill_dir()
 ANALYZE_SCRIPT = SKILL_DIR / "scripts" / "mcap_joint_module_report.py"
 BUILD_SCRIPT = SKILL_DIR / "scripts" / "build_feishu_report_assets.py"
 CSV_ARTIFACTS = (
@@ -93,7 +103,7 @@ def find_value(value: Any, keys: tuple[str, ...]) -> Any:
 def check_python_dependencies() -> None:
     missing = [name for name in PYTHON_MODULES if importlib.util.find_spec(name) is None]
     if missing:
-        requirement = REPO_ROOT / "requirements-mcap-report.txt"
+        requirement = TOOL_ROOT / "requirements-mcap-report.txt"
         raise CommandError(
             "missing Python modules: "
             + ", ".join(missing)
@@ -153,7 +163,7 @@ def doctor() -> int:
     if not ready:
         print(
             "\n修复建议：\n"
-            "1. 缺 Python 依赖：重新运行仓库中的 ./install.sh\n"
+            "1. 缺 Python 依赖：重新运行仓库中的 ./tools/mcap-report/install.sh\n"
             "2. 缺 lark-cli：npm install -g @larksuite/cli\n"
             "3. 未配置或未登录飞书：lark-cli config init，然后 lark-cli auth login --domain docs",
             file=sys.stderr,
@@ -195,14 +205,14 @@ def analyze(args: argparse.Namespace, mcap: Path, output_dir: Path) -> None:
         command.extend(["--end-sec", str(end_sec)])
 
     log(f"analyzing {mcap}")
-    run(command, cwd=REPO_ROOT)
+    run(command, cwd=TOOL_ROOT)
 
 
 def build_assets(output_dir: Path) -> dict[str, Any]:
     log("building Feishu document XML and staged assets")
     output = run(
         [sys.executable, str(BUILD_SCRIPT), str(output_dir)],
-        cwd=REPO_ROOT,
+        cwd=TOOL_ROOT,
     )
     return parse_json_output(output)
 

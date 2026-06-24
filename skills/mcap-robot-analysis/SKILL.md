@@ -47,14 +47,14 @@ The final Feishu report must contain or attach all artifacts:
 
 ## Standard Workflow
 
-When the repository-level `bin/mcap-report` command is available, prefer it as
+When the repository-level `tools/mcap-report/bin/mcap-report` command is available, prefer it as
 the orchestration entry point. It runs the same analysis scripts, publishes all
 artifacts, writes `delivery.json`, and returns the Feishu document URL. Use the
 individual steps below for diagnosis, partial reruns, or environments where the
 standalone command is unavailable.
 
 ```bash
-bin/mcap-report <bag.mcap> --duration-min 30 --sample-hz 10
+tools/mcap-report/bin/mcap-report <bag.mcap> --duration-min 30 --sample-hz 10
 ```
 
 1. Locate the `.mcap` file with `find . -maxdepth 3 -name '*.mcap'` if the user did not specify a path.

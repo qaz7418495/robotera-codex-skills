@@ -19,7 +19,7 @@ Clone the repository and run the installer:
 ```bash
 git clone https://github.com/qaz7418495/robotera-codex-skills.git
 cd robotera-codex-skills
-./install.sh
+./tools/mcap-report/install.sh
 ```
 
 The installer:
@@ -134,7 +134,7 @@ From the cloned repository:
 
 ```bash
 git pull
-./install.sh
+./tools/mcap-report/install.sh
 ```
 
 ## Uninstall
@@ -142,7 +142,7 @@ git pull
 From the cloned repository:
 
 ```bash
-./uninstall.sh
+./tools/mcap-report/uninstall.sh
 ```
 
 This removes the MCAP report application. It does not remove `lark-cli` or the

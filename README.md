@@ -12,7 +12,7 @@ This repository contains shareable Codex skills for ROBOTERA work.
 The MCAP pipeline can run without Codex. Install it once:
 
 ```bash
-./install.sh
+./tools/mcap-report/install.sh
 lark-cli config init
 lark-cli auth login --domain docs
 mcap-report --doctor
@@ -24,7 +24,7 @@ Then run it from any directory without activating a virtual environment:
 mcap-report /path/to/input.mcap --duration-min 30 --sample-hz 10
 ```
 
-See [docs/mcap-report-cli.md](docs/mcap-report-cli.md) for installation,
+See [tools/mcap-report/docs/README.md](tools/mcap-report/docs/README.md) for installation,
 publishing, dry-run, and failure recovery instructions.
 
 ## Install

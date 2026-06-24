@@ -6,7 +6,7 @@ BIN_DIR="${MCAP_REPORT_BIN_DIR:-$HOME/.local/bin}"
 
 usage() {
   cat <<'EOF'
-Usage: ./uninstall.sh
+Usage: ./tools/mcap-report/uninstall.sh
 
 Removes the standalone MCAP report application. It does not remove lark-cli,
 Feishu authentication, source repositories, or generated reports.
