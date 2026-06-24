@@ -4,6 +4,15 @@
 `.mcap` 文件，工具会生成 CSV、每关节 2×2 图表、左右对称关节统计，
 并创建一份飞书数据分析报告。
 
+本目录包含完整实现：
+
+- `bin/mcap-report`：命令入口、飞书发布、自动重试和断点续传。
+- `scripts/mcap_summary.py`：MCAP Topic 与元数据概览。
+- `scripts/mcap_joint_module_report.py`：解析、统计、CSV 和 PNG 生成。
+- `scripts/build_feishu_report_assets.py`：飞书报告 XML 与上传产物整理。
+
+Codex Skill 只负责识别需求并调用该 Tool，不再保存或复制分析脚本。
+
 ## 环境要求
 
 - Ubuntu。

@@ -16,19 +16,9 @@ from typing import Any
 
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
-
-
-def find_skill_dir() -> Path:
-    for parent in (TOOL_ROOT, *TOOL_ROOT.parents):
-        candidate = parent / "skills" / "mcap-robot-analysis"
-        if candidate.is_dir():
-            return candidate
-    raise RuntimeError("could not locate skills/mcap-robot-analysis")
-
-
-SKILL_DIR = find_skill_dir()
-ANALYZE_SCRIPT = SKILL_DIR / "scripts" / "mcap_joint_module_report.py"
-BUILD_SCRIPT = SKILL_DIR / "scripts" / "build_feishu_report_assets.py"
+SCRIPTS_DIR = TOOL_ROOT / "scripts"
+ANALYZE_SCRIPT = SCRIPTS_DIR / "mcap_joint_module_report.py"
+BUILD_SCRIPT = SCRIPTS_DIR / "build_feishu_report_assets.py"
 CSV_ARTIFACTS = (
     "joint_command_samples.csv",
     "joint_feedback_samples.csv",

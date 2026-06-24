@@ -5,9 +5,13 @@ Codex 独立运行的 MCAP 数据分析工具。
 
 ## 仓库内容
 
-- `skills/mcap-robot-analysis`：ROS2 MCAP 关节数据分析 Skill。
+- `skills/mcap-robot-analysis`：Codex 意图识别与 Tool 调用说明，不保存分析实现。
 - `skills/robotera-ops`：ROBOTERA 机器人操作与故障排查知识库。
-- `tools/mcap-report`：独立 MCAP 分析工具，输入一个 `.mcap` 文件，输出一份飞书数据分析报告。
+- `tools/mcap-report`：完整 MCAP 分析实现，输入一个 `.mcap` 文件，输出一份飞书数据分析报告。
+
+MCAP 的解析、统计、绘图、报告生成、飞书上传和断点续传均由
+`tools/mcap-report` 负责。以后修改 MCAP 分析功能时，只需更新 Tool；
+只有触发条件或调用方式发生变化时才需要修改 Skill。
 
 ## 同事如何使用 MCAP 工具
 

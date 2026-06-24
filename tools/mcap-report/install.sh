@@ -2,7 +2,6 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPOSITORY_ROOT="$(cd -- "$SOURCE_DIR/../.." && pwd)"
 INSTALL_ROOT="${MCAP_REPORT_INSTALL_ROOT:-$HOME/.local/share/robotera-mcap-report}"
 BIN_DIR="${MCAP_REPORT_BIN_DIR:-$HOME/.local/bin}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -58,11 +57,10 @@ fi
 
 echo "Installing application files to $INSTALL_ROOT"
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-rm -rf "$INSTALL_ROOT/bin" "$INSTALL_ROOT/skills" "$INSTALL_ROOT/docs"
+rm -rf "$INSTALL_ROOT/bin" "$INSTALL_ROOT/scripts" "$INSTALL_ROOT/skills" "$INSTALL_ROOT/docs"
 cp -a "$SOURCE_DIR/bin" "$INSTALL_ROOT/bin"
+cp -a "$SOURCE_DIR/scripts" "$INSTALL_ROOT/scripts"
 cp -a "$SOURCE_DIR/docs" "$INSTALL_ROOT/docs"
-mkdir -p "$INSTALL_ROOT/skills"
-cp -a "$REPOSITORY_ROOT/skills/mcap-robot-analysis" "$INSTALL_ROOT/skills/"
 cp "$SOURCE_DIR/requirements-mcap-report.txt" "$INSTALL_ROOT/"
 cp "$SOURCE_DIR/docs/README.md" "$INSTALL_ROOT/README.md"
 
