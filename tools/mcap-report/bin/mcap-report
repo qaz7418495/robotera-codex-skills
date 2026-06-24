@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -246,7 +247,13 @@ def create_document(xml_path: Path) -> tuple[str, str]:
     return str(document_id), str(url)
 
 
-def insert_media(document_id: str, path: Path, media_type: str, width: int) -> None:
+def insert_media(
+    document_id: str,
+    path: Path,
+    media_type: str,
+    width: int,
+    retries: int,
+) -> None:
     command = [
         "lark-cli",
         "docs",
@@ -271,7 +278,19 @@ def insert_media(document_id: str, path: Path, media_type: str, width: int) -> N
             "--caption",
             path.stem,
         ])
-    run(command, cwd=path.parent)
+    for attempt in range(retries + 1):
+        try:
+            run(command, cwd=path.parent)
+            return
+        except CommandError:
+            if attempt >= retries:
+                raise
+            delay = min(5 * (2 ** attempt), 60)
+            log(
+                f"upload failed for {path.name}; "
+                f"retrying in {delay}s ({attempt + 1}/{retries})"
+            )
+            time.sleep(delay)
 
 
 def write_delivery(output_dir: Path, state: dict[str, Any]) -> None:
@@ -281,6 +300,17 @@ def write_delivery(output_dir: Path, state: dict[str, Any]) -> None:
     )
 
 
+def read_delivery(output_dir: Path) -> dict[str, Any]:
+    path = output_dir / "delivery.json"
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def publish(
     output_dir: Path,
     *,
@@ -288,6 +318,7 @@ def publish(
     document_url: str | None,
     chart_width: int,
     dry_run: bool,
+    retries: int,
 ) -> dict[str, Any]:
     xml_path = output_dir / "feishu_report.xml"
     assets_dir = output_dir / "feishu_assets"
@@ -309,32 +340,61 @@ def publish(
         write_delivery(output_dir, state)
         return state
 
+    previous = read_delivery(output_dir)
+    if not document_id:
+        document_id = previous.get("document_id")
+        document_url = document_url or previous.get("document_url")
+
     if not document_id:
         document_id, document_url = create_document(xml_path)
     elif not document_url:
         document_url = f"https://feishu.cn/docx/{document_id}"
 
+    uploaded_csv = list(previous.get("uploaded_csv", [])) if previous.get("document_id") == document_id else []
+    uploaded_charts = list(previous.get("uploaded_charts", [])) if previous.get("document_id") == document_id else []
     state: dict[str, Any] = {
         "status": "uploading",
         "document_id": document_id,
         "document_url": document_url,
-        "uploaded_csv": [],
-        "uploaded_charts": [],
+        "uploaded_csv": uploaded_csv,
+        "uploaded_charts": uploaded_charts,
         "output_dir": str(output_dir),
     }
     write_delivery(output_dir, state)
 
     for index, path in enumerate(csv_paths, start=1):
+        if path.name in state["uploaded_csv"]:
+            log(f"skipping uploaded CSV {index}/{len(csv_paths)}: {path.name}")
+            continue
         log(f"uploading CSV {index}/{len(csv_paths)}: {path.name}")
-        insert_media(document_id, path, "file", chart_width)
-        state["uploaded_csv"].append(path.name)
-        write_delivery(output_dir, state)
+        try:
+            insert_media(document_id, path, "file", chart_width, retries)
+        except CommandError as exc:
+            state["status"] = "failed"
+            state["error"] = str(exc)
+            write_delivery(output_dir, state)
+            raise
+        else:
+            state["uploaded_csv"].append(path.name)
+            state.pop("error", None)
+            write_delivery(output_dir, state)
 
     for index, path in enumerate(chart_paths, start=1):
+        if path.name in state["uploaded_charts"]:
+            log(f"skipping uploaded chart {index}/{len(chart_paths)}: {path.name}")
+            continue
         log(f"uploading chart {index}/{len(chart_paths)}: {path.name}")
-        insert_media(document_id, path, "image", chart_width)
-        state["uploaded_charts"].append(path.name)
-        write_delivery(output_dir, state)
+        try:
+            insert_media(document_id, path, "image", chart_width, retries)
+        except CommandError as exc:
+            state["status"] = "failed"
+            state["error"] = str(exc)
+            write_delivery(output_dir, state)
+            raise
+        else:
+            state["uploaded_charts"].append(path.name)
+            state.pop("error", None)
+            write_delivery(output_dir, state)
 
     state["status"] = "complete"
     state["csv_count"] = len(csv_paths)
@@ -367,6 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--feedback-topic", default="/joint_states")
     parser.add_argument("--temperature-topic", default="/temperature")
     parser.add_argument("--chart-width", type=int, default=900)
+    parser.add_argument("--retries", type=int, default=4, help="upload retries for transient network failures")
     return parser
 
 
@@ -387,6 +448,8 @@ def main() -> int:
             raise CommandError("--end-sec must be greater than --start-sec")
         if args.chart_width <= 0:
             raise CommandError("--chart-width must be greater than zero")
+        if args.retries < 0:
+            raise CommandError("--retries cannot be negative")
         check_python_dependencies()
         if args.publish_only:
             if args.mcap:
@@ -425,6 +488,7 @@ def main() -> int:
                 document_url=args.doc_url,
                 chart_width=args.chart_width,
                 dry_run=args.dry_run,
+                retries=args.retries,
             )
 
         print(json.dumps(result, ensure_ascii=False, indent=2))
