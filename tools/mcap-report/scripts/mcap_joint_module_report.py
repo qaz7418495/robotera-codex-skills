@@ -60,6 +60,19 @@ FINGER_MARKERS = (
 )
 
 
+class SequentialStream:
+    """Expose a file as non-seekable so MCAP records are consumed in order."""
+
+    def __init__(self, raw: Any):
+        self.raw = raw
+
+    def read(self, size: int = -1) -> bytes:
+        return self.raw.read(size)
+
+    def seekable(self) -> bool:
+        return False
+
+
 def safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_")
 
@@ -363,59 +376,90 @@ def main() -> None:
     topic_counts: dict[str, int] = defaultdict(int)
     all_topics: set[str] = set()
 
+    topics = [args.command_topic, args.feedback_topic, args.temperature_topic]
+    sequential_fallback = False
+    read_warning = ""
     with args.mcap.open("rb") as f:
         reader = make_reader(f, decoder_factories=[DecoderFactory()])
-        summary = reader.get_summary()
-        start_ns = summary.statistics.message_start_time
-        end_ns = summary.statistics.message_end_time
-        topics = [args.command_topic, args.feedback_topic, args.temperature_topic]
-        for channel in summary.channels.values():
-            all_topics.add(channel.topic)
+        try:
+            summary = reader.get_summary()
+        except Exception as exc:
+            sequential_fallback = True
+            read_warning = (
+                "MCAP summary/footer is unavailable; read records sequentially "
+                f"from the valid prefix ({type(exc).__name__})."
+            )
+            f.seek(0)
+            reader = make_reader(
+                SequentialStream(f),
+                decoder_factories=[DecoderFactory()],
+            )
+            message_iterator = reader.iter_decoded_messages(
+                topics=topics,
+                log_time_order=False,
+            )
+        else:
+            start_ns = summary.statistics.message_start_time
+            end_ns = summary.statistics.message_end_time
+            for channel in summary.channels.values():
+                all_topics.add(channel.topic)
+            message_iterator = reader.iter_decoded_messages(topics=topics)
 
-        for schema, channel, message, decoded in reader.iter_decoded_messages(topics=topics):
-            if first_ns is None:
-                first_ns = summary.statistics.message_start_time
-            rel_s = (message.log_time - first_ns) / 1e9
-            if args.start_sec is not None and rel_s < args.start_sec:
-                continue
-            if args.end_sec is not None and rel_s > args.end_sec:
-                break
-            if selected_start_ns is None:
-                selected_start_ns = message.log_time
-            selected_end_ns = message.log_time
-            topic_counts[channel.topic] += 1
-
-            if channel.topic in (args.command_topic, args.feedback_topic):
-                joint_values = msg_to_joint_values(decoded)
-                for joint, values in joint_values.items():
-                    seen_joints.add(joint)
-                    target = commands if channel.topic == args.command_topic else feedback
-                    for field, value in values.items():
-                        key = f"{joint}.{field}"
-                        if period == 0 or should_keep(last_keep, f"{channel.topic}:{key}", rel_s, period):
-                            add_sample_with_time(target, key, message.log_time, rel_s, value, args.tz_hours)
-                continue
-
-            if channel.topic == args.temperature_topic:
-                seq = find_numeric_sequence(decoded)
-                if not seq:
+        try:
+            for schema, channel, message, decoded in message_iterator:
+                all_topics.add(channel.topic)
+                if first_ns is None:
+                    first_ns = start_ns or message.log_time
+                    if start_ns is None:
+                        start_ns = message.log_time
+                rel_s = (message.log_time - first_ns) / 1e9
+                if args.start_sec is not None and rel_s < args.start_sec:
                     continue
-                names = extract_names(decoded)
-                if names and len(names) * 2 <= len(seq):
-                    temp_joints = names
-                else:
-                    model = detect_model(seen_joints, args.model)
-                    temp_joints = MODEL_JOINTS[model]
-                for i, joint in enumerate(temp_joints):
-                    driver_i = 2 * i
-                    motor_i = 2 * i + 1
-                    if driver_i >= len(seq):
-                        break
-                    seen_joints.add(joint)
-                    if period == 0 or should_keep(last_keep, f"{channel.topic}:{joint}", rel_s, period):
-                        add_sample_with_time(temps, f"{joint}.driver_temperature", message.log_time, rel_s, seq[driver_i], args.tz_hours)
-                        if motor_i < len(seq):
-                            add_sample_with_time(temps, f"{joint}.motor_temperature", message.log_time, rel_s, seq[motor_i], args.tz_hours)
+                if args.end_sec is not None and rel_s > args.end_sec:
+                    break
+                if selected_start_ns is None:
+                    selected_start_ns = message.log_time
+                selected_end_ns = message.log_time
+                topic_counts[channel.topic] += 1
+
+                if channel.topic in (args.command_topic, args.feedback_topic):
+                    joint_values = msg_to_joint_values(decoded)
+                    for joint, values in joint_values.items():
+                        seen_joints.add(joint)
+                        target = commands if channel.topic == args.command_topic else feedback
+                        for field, value in values.items():
+                            key = f"{joint}.{field}"
+                            if period == 0 or should_keep(last_keep, f"{channel.topic}:{key}", rel_s, period):
+                                add_sample_with_time(target, key, message.log_time, rel_s, value, args.tz_hours)
+                    continue
+
+                if channel.topic == args.temperature_topic:
+                    seq = find_numeric_sequence(decoded)
+                    if not seq:
+                        continue
+                    names = extract_names(decoded)
+                    if names and len(names) * 2 <= len(seq):
+                        temp_joints = names
+                    else:
+                        model = detect_model(seen_joints, args.model)
+                        temp_joints = MODEL_JOINTS[model]
+                    for i, joint in enumerate(temp_joints):
+                        driver_i = 2 * i
+                        motor_i = 2 * i + 1
+                        if driver_i >= len(seq):
+                            break
+                        seen_joints.add(joint)
+                        if period == 0 or should_keep(last_keep, f"{channel.topic}:{joint}", rel_s, period):
+                            add_sample_with_time(temps, f"{joint}.driver_temperature", message.log_time, rel_s, seq[driver_i], args.tz_hours)
+                            if motor_i < len(seq):
+                                add_sample_with_time(temps, f"{joint}.motor_temperature", message.log_time, rel_s, seq[motor_i], args.tz_hours)
+        except Exception as exc:
+            if not sequential_fallback:
+                raise
+            tail_warning = f" Sequential reading stopped at the damaged/truncated tail ({type(exc).__name__})."
+            read_warning += tail_warning
+            if selected_end_ns is None:
+                raise
 
     model = detect_model(seen_joints, args.model)
     ordered_joints = [joint for joint in MODEL_JOINTS[model] if joint in seen_joints]
@@ -492,6 +536,8 @@ def main() -> None:
     if start_ns:
         report_title += f"_{fmt_time(start_ns, args.tz_hours)}"
     requested_duration_s = args.end_sec - (args.start_sec or 0.0) if args.end_sec is not None else None
+    if end_ns is None:
+        end_ns = selected_end_ns
     bag_duration_s = (end_ns - start_ns) / 1e9 if start_ns and end_ns else None
     selected_duration_s = (selected_end_ns - selected_start_ns) / 1e9 if selected_start_ns and selected_end_ns else 0.0
     analyzed_topics = [args.command_topic, args.feedback_topic, args.temperature_topic]
@@ -521,6 +567,8 @@ def main() -> None:
         "topic_sample_counts": dict(topic_counts),
         "missing_required_topics": missing_required_topics,
         "empty_analyzed_topics": empty_analyzed_topics,
+        "sequential_fallback": sequential_fallback,
+        "read_warning": read_warning,
         "joint_count": len(ordered_joints),
         "outputs": {
             "joint_feedback_samples": str(args.output_dir / "joint_feedback_samples.csv"),

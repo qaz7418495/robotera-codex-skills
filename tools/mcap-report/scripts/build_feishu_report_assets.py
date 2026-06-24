@@ -173,6 +173,8 @@ def build_xml(output_dir: Path, manifest: dict[str, Any], chart_count: int) -> s
         caveats.append("缺失 topic：" + ", ".join(missing))
     if empty:
         caveats.append("空 topic/无样本：" + ", ".join(empty))
+    if manifest.get("read_warning"):
+        caveats.append("源 MCAP 未完整结束或缺少 Footer，已按顺序读取可用数据区间。")
     caveats.append("手指关节力矩单位与整机关节不同，已从左右对比和整机 Effort 排名中排除。")
     if not caveats:
         caveats.append("未发现影响报告生成的必要数据缺口。")
