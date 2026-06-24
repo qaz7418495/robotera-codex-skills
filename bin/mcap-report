@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -104,8 +103,62 @@ def check_python_dependencies() -> None:
 
 def check_lark_cli() -> None:
     if shutil.which("lark-cli") is None:
-        raise CommandError("lark-cli was not found in PATH")
+        raise CommandError(
+            "lark-cli was not found in PATH\n"
+            "Install with: npm install -g @larksuite/cli"
+        )
     run(["lark-cli", "auth", "status", "--json"])
+
+
+def doctor() -> int:
+    checks: dict[str, Any] = {
+        "python": {
+            "ok": sys.version_info >= (3, 10),
+            "executable": sys.executable,
+            "version": sys.version.split()[0],
+        },
+        "python_modules": {},
+        "lark_cli": {
+            "ok": False,
+            "path": shutil.which("lark-cli"),
+            "authenticated": False,
+        },
+    }
+    for module in PYTHON_MODULES:
+        checks["python_modules"][module] = importlib.util.find_spec(module) is not None
+
+    lark_path = checks["lark_cli"]["path"]
+    if lark_path:
+        checks["lark_cli"]["ok"] = True
+        process = subprocess.run(
+            ["lark-cli", "auth", "status", "--json"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        checks["lark_cli"]["authenticated"] = process.returncode == 0
+        if process.returncode != 0:
+            checks["lark_cli"]["error"] = process.stderr.strip() or process.stdout.strip()
+
+    all_modules = all(checks["python_modules"].values())
+    ready = (
+        checks["python"]["ok"]
+        and all_modules
+        and checks["lark_cli"]["ok"]
+        and checks["lark_cli"]["authenticated"]
+    )
+    checks["ready"] = ready
+    print(json.dumps(checks, ensure_ascii=False, indent=2))
+    if not ready:
+        print(
+            "\n修复建议：\n"
+            "1. 缺 Python 依赖：重新运行仓库中的 ./install.sh\n"
+            "2. 缺 lark-cli：npm install -g @larksuite/cli\n"
+            "3. 未配置或未登录飞书：lark-cli config init，然后 lark-cli auth login --domain docs",
+            file=sys.stderr,
+        )
+    return 0 if ready else 1
 
 
 def default_output_dir(mcap: Path) -> Path:
@@ -286,6 +339,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Analyze a ROBOTERA ROS2 MCAP and publish a Feishu report.",
     )
     parser.add_argument("mcap", nargs="?", type=Path, help="input .mcap file")
+    parser.add_argument("--doctor", action="store_true", help="check dependencies and Feishu authentication")
     parser.add_argument("--publish-only", type=Path, metavar="OUTPUT_DIR")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--doc", dest="document_id", help="publish into an existing Feishu document")
@@ -309,6 +363,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     try:
+        if args.doctor:
+            return doctor()
         if args.sample_hz <= 0:
             raise CommandError("--sample-hz must be greater than zero")
         if args.duration_min is not None and args.duration_min <= 0:

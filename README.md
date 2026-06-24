@@ -9,13 +9,19 @@ This repository contains shareable Codex skills for ROBOTERA work.
 
 ## Standalone MCAP Tool
 
-The MCAP pipeline can run without Codex:
+The MCAP pipeline can run without Codex. Install it once:
 
 ```bash
-python3 -m venv .venv-mcap-report
-. .venv-mcap-report/bin/activate
-python -m pip install -r requirements-mcap-report.txt
-bin/mcap-report /path/to/input.mcap --duration-min 30
+./install.sh
+lark-cli config init
+lark-cli auth login --domain docs
+mcap-report --doctor
+```
+
+Then run it from any directory without activating a virtual environment:
+
+```bash
+mcap-report /path/to/input.mcap --duration-min 30 --sample-hz 10
 ```
 
 See [docs/mcap-report-cli.md](docs/mcap-report-cli.md) for installation,
