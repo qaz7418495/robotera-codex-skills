@@ -90,6 +90,9 @@ mcap-report /绝对路径/数据包.mcap \
 完整操作说明见
 [MCAP 工具使用手册](tools/mcap-report/docs/README.md)。
 
+开发和长期维护约束见
+[MCAP Tool 维护说明](tools/mcap-report/docs/MAINTENANCE.md)。
+
 ## 更新工具
 
 ```bash
