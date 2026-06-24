@@ -98,6 +98,19 @@ exec "$INSTALL_ROOT/.venv/bin/python" "$INSTALL_ROOT/bin/mcap-report" "\$@"
 EOF
 chmod +x "$BIN_DIR/mcap-report"
 
+SHELL_RC="$HOME/.bashrc"
+PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+if [[ ! -f "$SHELL_RC" ]] || ! grep -Fq "$BIN_DIR" "$SHELL_RC"; then
+  {
+    echo
+    echo "# ROBOTERA MCAP report tool"
+    echo "$PATH_LINE"
+  } >>"$SHELL_RC"
+  PATH_UPDATED=1
+else
+  PATH_UPDATED=0
+fi
+
 if ! command -v lark-cli >/dev/null 2>&1; then
   if ((SKIP_LARK_CLI == 0)); then
     if command -v npm >/dev/null 2>&1; then
@@ -115,9 +128,10 @@ fi
 echo
 echo "Installation complete."
 echo "Command: $BIN_DIR/mcap-report"
-if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-  echo "Add this to your shell configuration, then reopen the terminal:"
-  echo "  export PATH=\"$BIN_DIR:\$PATH\""
+if ((PATH_UPDATED == 1)) || [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+  echo "PATH configuration was added to $SHELL_RC."
+  echo "Run this once in the current terminal:"
+  echo "  source \"$SHELL_RC\""
 fi
 echo
 echo "Run environment check:"

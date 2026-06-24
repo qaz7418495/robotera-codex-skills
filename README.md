@@ -30,11 +30,16 @@ cd robotera-codex-skills
 `python3-venv`。安装完成后不需要进入仓库，也不需要手动激活 Python
 虚拟环境。
 
-如果提示找不到 `mcap-report`，执行：
+安装器会自动把 `~/.local/bin` 写入 `~/.bashrc`。安装后在当前终端执行：
 
 ```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+```
+
+如果仍提示找不到命令，可直接使用绝对路径检查：
+
+```bash
+~/.local/bin/mcap-report --doctor
 ```
 
 ### 3. 首次配置飞书

@@ -33,11 +33,16 @@ cd robotera-codex-skills
 
 安装完成后不需要执行 `source` 激活虚拟环境。
 
-如果终端提示 `mcap-report：未找到命令`，执行：
+安装器会自动把命令目录写入 `~/.bashrc`。安装后在当前终端执行：
 
 ```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+```
+
+如果仍提示 `mcap-report：未找到命令`，先用绝对路径检查：
+
+```bash
+~/.local/bin/mcap-report --doctor
 ```
 
 ## 飞书首次配置
@@ -161,8 +166,15 @@ cd robotera-codex-skills
 ### 找不到 `mcap-report`
 
 ```bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+hash -r
+mcap-report --doctor
+```
+
+仍然找不到时执行：
+
+```bash
+~/.local/bin/mcap-report --doctor
 ```
 
 ### 缺少 Python 依赖
