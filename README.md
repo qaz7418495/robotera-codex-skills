@@ -7,6 +7,20 @@ This repository contains shareable Codex skills for ROBOTERA work.
 - `mcap-robot-analysis`: Analyze ROS2 MCAP robot joint-module data and produce Feishu reports.
 - `robotera-ops`: ROBOTERA robot operation and troubleshooting knowledge base.
 
+## Standalone MCAP Tool
+
+The MCAP pipeline can run without Codex:
+
+```bash
+python3 -m venv .venv-mcap-report
+. .venv-mcap-report/bin/activate
+python -m pip install -r requirements-mcap-report.txt
+bin/mcap-report /path/to/input.mcap --duration-min 30
+```
+
+See [docs/mcap-report-cli.md](docs/mcap-report-cli.md) for installation,
+publishing, dry-run, and failure recovery instructions.
+
 ## Install
 
 Clone the repository and link the desired skills into `~/.codex/skills`:

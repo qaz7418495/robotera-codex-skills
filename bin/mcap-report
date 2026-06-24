@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""Standalone MCAP-to-Feishu report command."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SKILL_DIR = REPO_ROOT / "skills" / "mcap-robot-analysis"
+ANALYZE_SCRIPT = SKILL_DIR / "scripts" / "mcap_joint_module_report.py"
+BUILD_SCRIPT = SKILL_DIR / "scripts" / "build_feishu_report_assets.py"
+CSV_ARTIFACTS = (
+    "joint_command_samples.csv",
+    "joint_feedback_samples.csv",
+    "joint_temperature_samples.csv",
+    "joint_stats.csv",
+    "left_right_compare.csv",
+)
+PYTHON_MODULES = ("mcap", "mcap_ros2", "matplotlib")
+
+
+class CommandError(RuntimeError):
+    pass
+
+
+def log(message: str) -> None:
+    print(f"[mcap-report] {message}", file=sys.stderr, flush=True)
+
+
+def run(
+    argv: list[str],
+    *,
+    cwd: Path | None = None,
+    stdin: str | None = None,
+) -> str:
+    process = subprocess.run(
+        argv,
+        cwd=cwd,
+        input=stdin,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if process.returncode != 0:
+        detail = process.stderr.strip() or process.stdout.strip()
+        raise CommandError(f"command failed ({process.returncode}): {' '.join(argv)}\n{detail}")
+    if process.stderr.strip():
+        log(process.stderr.strip())
+    return process.stdout
+
+
+def parse_json_output(output: str) -> dict[str, Any]:
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(output):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise CommandError(f"command did not return a JSON object:\n{output[-2000:]}")
+
+
+def find_value(value: Any, keys: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        for key in keys:
+            if value.get(key):
+                return value[key]
+        for child in value.values():
+            found = find_value(child, keys)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = find_value(child, keys)
+            if found:
+                return found
+    return None
+
+
+def check_python_dependencies() -> None:
+    missing = [name for name in PYTHON_MODULES if importlib.util.find_spec(name) is None]
+    if missing:
+        requirement = REPO_ROOT / "requirements-mcap-report.txt"
+        raise CommandError(
+            "missing Python modules: "
+            + ", ".join(missing)
+            + f"\nInstall with: {sys.executable} -m pip install -r {requirement}"
+        )
+
+
+def check_lark_cli() -> None:
+    if shutil.which("lark-cli") is None:
+        raise CommandError("lark-cli was not found in PATH")
+    run(["lark-cli", "auth", "status", "--json"])
+
+
+def default_output_dir(mcap: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return Path.home() / "mcap_analysis_outputs" / f"{mcap.stem}_{timestamp}"
+
+
+def analyze(args: argparse.Namespace, mcap: Path, output_dir: Path) -> None:
+    command = [
+        sys.executable,
+        str(ANALYZE_SCRIPT),
+        str(mcap),
+        "--output-dir",
+        str(output_dir),
+        "--model",
+        args.model,
+        "--sample-hz",
+        str(args.sample_hz),
+        "--tz-hours",
+        str(args.tz_hours),
+        "--command-topic",
+        args.command_topic,
+        "--feedback-topic",
+        args.feedback_topic,
+        "--temperature-topic",
+        args.temperature_topic,
+    ]
+    if args.start_sec is not None:
+        command.extend(["--start-sec", str(args.start_sec)])
+    end_sec = args.end_sec
+    if args.duration_min is not None:
+        end_sec = (args.start_sec or 0.0) + args.duration_min * 60.0
+    if end_sec is not None:
+        command.extend(["--end-sec", str(end_sec)])
+
+    log(f"analyzing {mcap}")
+    run(command, cwd=REPO_ROOT)
+
+
+def build_assets(output_dir: Path) -> dict[str, Any]:
+    log("building Feishu document XML and staged assets")
+    output = run(
+        [sys.executable, str(BUILD_SCRIPT), str(output_dir)],
+        cwd=REPO_ROOT,
+    )
+    return parse_json_output(output)
+
+
+def create_document(xml_path: Path) -> tuple[str, str]:
+    log("creating Feishu document")
+    output = run(
+        [
+            "lark-cli",
+            "docs",
+            "+create",
+            "--api-version",
+            "v2",
+            "--as",
+            "user",
+            "--content",
+            "-",
+            "--format",
+            "json",
+        ],
+        cwd=xml_path.parent,
+        stdin=xml_path.read_text(encoding="utf-8"),
+    )
+    payload = parse_json_output(output)
+    document_id = find_value(payload, ("document_id", "doc_token", "token"))
+    url = find_value(payload, ("url",))
+    if not document_id:
+        raise CommandError(f"could not find document_id in create response:\n{output}")
+    if not url:
+        url = f"https://feishu.cn/docx/{document_id}"
+    return str(document_id), str(url)
+
+
+def insert_media(document_id: str, path: Path, media_type: str, width: int) -> None:
+    command = [
+        "lark-cli",
+        "docs",
+        "+media-insert",
+        "--as",
+        "user",
+        "--doc",
+        document_id,
+        "--file",
+        path.name,
+        "--type",
+        media_type,
+        "--format",
+        "json",
+    ]
+    if media_type == "image":
+        command.extend([
+            "--align",
+            "center",
+            "--width",
+            str(width),
+            "--caption",
+            path.stem,
+        ])
+    run(command, cwd=path.parent)
+
+
+def write_delivery(output_dir: Path, state: dict[str, Any]) -> None:
+    (output_dir / "delivery.json").write_text(
+        json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def publish(
+    output_dir: Path,
+    *,
+    document_id: str | None,
+    document_url: str | None,
+    chart_width: int,
+    dry_run: bool,
+) -> dict[str, Any]:
+    xml_path = output_dir / "feishu_report.xml"
+    assets_dir = output_dir / "feishu_assets"
+    csv_paths = [assets_dir / name for name in CSV_ARTIFACTS]
+    chart_paths = sorted((assets_dir / "charts").glob("*.png"))
+    missing = [path for path in [xml_path, *csv_paths] if not path.exists()]
+    if missing:
+        raise CommandError("missing report artifacts:\n" + "\n".join(str(path) for path in missing))
+
+    if dry_run:
+        state = {
+            "status": "dry-run",
+            "document_id": document_id,
+            "document_url": document_url,
+            "csv_count": len(csv_paths),
+            "chart_count": len(chart_paths),
+            "output_dir": str(output_dir),
+        }
+        write_delivery(output_dir, state)
+        return state
+
+    if not document_id:
+        document_id, document_url = create_document(xml_path)
+    elif not document_url:
+        document_url = f"https://feishu.cn/docx/{document_id}"
+
+    state: dict[str, Any] = {
+        "status": "uploading",
+        "document_id": document_id,
+        "document_url": document_url,
+        "uploaded_csv": [],
+        "uploaded_charts": [],
+        "output_dir": str(output_dir),
+    }
+    write_delivery(output_dir, state)
+
+    for index, path in enumerate(csv_paths, start=1):
+        log(f"uploading CSV {index}/{len(csv_paths)}: {path.name}")
+        insert_media(document_id, path, "file", chart_width)
+        state["uploaded_csv"].append(path.name)
+        write_delivery(output_dir, state)
+
+    for index, path in enumerate(chart_paths, start=1):
+        log(f"uploading chart {index}/{len(chart_paths)}: {path.name}")
+        insert_media(document_id, path, "image", chart_width)
+        state["uploaded_charts"].append(path.name)
+        write_delivery(output_dir, state)
+
+    state["status"] = "complete"
+    state["csv_count"] = len(csv_paths)
+    state["chart_count"] = len(chart_paths)
+    write_delivery(output_dir, state)
+    return state
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="mcap-report",
+        description="Analyze a ROBOTERA ROS2 MCAP and publish a Feishu report.",
+    )
+    parser.add_argument("mcap", nargs="?", type=Path, help="input .mcap file")
+    parser.add_argument("--publish-only", type=Path, metavar="OUTPUT_DIR")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--doc", dest="document_id", help="publish into an existing Feishu document")
+    parser.add_argument("--doc-url", help="URL recorded with --doc")
+    parser.add_argument("--local-only", action="store_true", help="generate local files without publishing")
+    parser.add_argument("--dry-run", action="store_true", help="validate artifacts without writing Feishu")
+    parser.add_argument("--model", choices=("auto", "M7", "L3"), default="auto")
+    parser.add_argument("--sample-hz", type=float, default=10.0)
+    parser.add_argument("--start-sec", type=float)
+    time_group = parser.add_mutually_exclusive_group()
+    time_group.add_argument("--end-sec", type=float)
+    time_group.add_argument("--duration-min", type=float)
+    parser.add_argument("--tz-hours", type=int, default=8)
+    parser.add_argument("--command-topic", default="/hybrid_body_controller/commands")
+    parser.add_argument("--feedback-topic", default="/joint_states")
+    parser.add_argument("--temperature-topic", default="/temperature")
+    parser.add_argument("--chart-width", type=int, default=900)
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    try:
+        if args.sample_hz <= 0:
+            raise CommandError("--sample-hz must be greater than zero")
+        if args.duration_min is not None and args.duration_min <= 0:
+            raise CommandError("--duration-min must be greater than zero")
+        if args.start_sec is not None and args.start_sec < 0:
+            raise CommandError("--start-sec cannot be negative")
+        if args.end_sec is not None and args.end_sec < 0:
+            raise CommandError("--end-sec cannot be negative")
+        if args.end_sec is not None and args.start_sec is not None and args.end_sec <= args.start_sec:
+            raise CommandError("--end-sec must be greater than --start-sec")
+        if args.chart_width <= 0:
+            raise CommandError("--chart-width must be greater than zero")
+        check_python_dependencies()
+        if args.publish_only:
+            if args.mcap:
+                raise CommandError("do not provide an MCAP together with --publish-only")
+            output_dir = args.publish_only.expanduser().resolve()
+        else:
+            if not args.mcap:
+                raise CommandError("an MCAP path is required unless --publish-only is used")
+            mcap = args.mcap.expanduser().resolve()
+            if not mcap.is_file():
+                raise CommandError(f"MCAP file does not exist: {mcap}")
+            if mcap.suffix.lower() != ".mcap":
+                raise CommandError(f"input file must end with .mcap: {mcap}")
+            output_dir = (
+                args.output_dir.expanduser().resolve()
+                if args.output_dir
+                else default_output_dir(mcap)
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
+            analyze(args, mcap, output_dir)
+
+        if not output_dir.is_dir():
+            raise CommandError(f"output directory does not exist: {output_dir}")
+        build_assets(output_dir)
+
+        if args.local_only:
+            result = {
+                "status": "local-only",
+                "output_dir": str(output_dir),
+            }
+        else:
+            check_lark_cli()
+            result = publish(
+                output_dir,
+                document_id=args.document_id,
+                document_url=args.doc_url,
+                chart_width=args.chart_width,
+                dry_run=args.dry_run,
+            )
+
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result.get("document_url"):
+            print(result["document_url"])
+        return 0
+    except (CommandError, OSError, ValueError) as exc:
+        log(f"ERROR: {exc}")
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
